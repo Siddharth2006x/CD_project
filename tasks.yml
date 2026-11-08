@@ -1,0 +1,78 @@
+
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: cleanup
+  labels:
+    app.kubernetes.io/part-of: python-cicd
+
+spec:
+  description: Clean up previously deployed OpenShift application resources.
+
+  params:
+    - name: app-label
+      type: string
+      default: python-cicd
+
+  steps:
+    - name: cleanup-resources
+      image: quay.io/openshift/origin-cli:latest
+      script: |
+        #!/bin/sh
+        set -e
+
+        echo "Starting cleanup task..."
+
+        oc delete all \
+          --selector=app=$(params.app-label) \
+          --ignore-not-found=true \
+          --wait=true
+
+        echo "Cleanup task completed successfully."
+
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: nose
+  labels:
+    app.kubernetes.io/part-of: python-cicd
+
+spec:
+  description: Install Python dependencies and execute unit tests using nose.
+
+  workspaces:
+    - name: source
+
+  steps:
+    - name: install-dependencies
+      image: python:3.11-slim
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/sh
+        set -e
+
+        echo "Installing Python dependencies..."
+
+        python -m pip install --upgrade pip
+        pip install nose flake8
+
+        if [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        fi
+
+        echo "Dependencies installed successfully."
+
+    - name: run-nose-tests
+      image: python:3.11-slim
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/sh
+        set -e
+
+        echo "Running unit tests with nose..."
+
+        nosetests -v
+
+        echo "Nose unit tests completed successfully."
